@@ -40,6 +40,7 @@ class Bucket
             static::$client = new S3Client([
                 'region' => $bucketConfig['region'] ?? 'auto',
                 'endpoint' => $bucketConfig['endpoint'],
+                'use_path_style_endpoint' => $bucketConfig['use_path_style_endpoint'] ?? false,
                 'version' => 'latest',
                 'credentials' => (new \Aws\Credentials\Credentials(
                     $bucketConfig['key'],
@@ -166,7 +167,8 @@ class Bucket
         unset($resource);
 
         try {
-            $url = static::$client->getObjectUrl(static::name(), $destination);
+            $url = static::url(static::name(), $destination);
+            // $url = static::$client->getObjectUrl(static::name(), $destination);
         } catch (\Throwable $th) {
             // upload successful but url generation failed (user would have to generate it manually)
             return true;
@@ -192,6 +194,45 @@ class Bucket
     public static function connection(string $connection): ?Bucket
     {
         return static::connect(\Leaf\Config::getStatic('storage.connections')[$connection]);
+    }
+
+    /**
+     * Get the URL of a file
+     * @param string $bucket The bucket to use
+     * @param string $path The path to the file
+     * @return string|null
+     */
+    public static function url(string $bucket, string $path): ?string
+    {
+        $bucketConfig = null;
+        $connections = array_values(\Leaf\Config::getStatic('storage.connections') ?? []);
+
+        foreach ($connections as $connection) {
+            if ($connection['bucket'] === $bucket) {
+                $bucketConfig = $connection;
+                break;
+            }
+        }
+
+        if (!$bucketConfig) {
+            return null;
+        }
+
+        $client = new S3Client([
+            'region' => $bucketConfig['region'] ?? 'auto',
+            'endpoint' => $bucketConfig['url'],
+            'use_path_style_endpoint' => $bucketConfig['use_path_style_endpoint'] ?? false,
+            'version' => 'latest',
+            'credentials' => (new \Aws\Credentials\Credentials(
+                $bucketConfig['key'],
+                $bucketConfig['secret']
+            ))
+        ]);
+
+        $url = $client->getObjectUrl($bucketConfig['bucket'], $path);
+        $url = str_replace($bucketConfig['bucket'] . '.', '', $url);
+
+        return $url;
     }
 
     /**
