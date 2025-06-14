@@ -94,6 +94,65 @@ class Bucket
     }
 
     /**
+     * Create a new file in the bucket
+     * @param string $path The path to the file
+     * @param string $content The content of the file
+     * @param array $options The options for the file
+     * @return string|false The URL of the file or false on failure
+     */
+    public static function createFile(string $path, string $content, array $options = [])
+    {
+        $options = array_merge($options, [
+            'visibility' => 'public',
+            'metadata' => [
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s')
+            ]
+        ]);
+
+        $path = (new Path($path))->normalize();
+
+        if (!static::$bucket->directoryExists($path)) {
+            static::$bucket->createDirectory($path);
+        }
+
+        $fileName = $options['name'] ?? basename($path);
+        $destination = (new Path($path))->join($fileName);
+
+        if (static::$bucket->fileExists($destination)) {
+            if ($options['overwrite'] ?? false) {
+                static::$bucket->delete($destination);
+            } else if ($options['rename'] ?? false) {
+                $destination = str_replace(
+                    $fileName,
+                    time() . '_' . uniqid() . '_' . $fileName,
+                    $destination
+                );
+            } else {
+                static::$errorsArray[$path] = "File $destination already exists";
+                return false;
+            }
+        }
+
+        try {
+            static::$bucket->write($destination, $content, $options);
+        } catch (\League\Flysystem\FilesystemException | \League\Flysystem\UnableToWriteFile $exception) {
+            static::$errorsArray[$path] = $exception->getMessage();
+            return false;
+        }
+
+        try {
+            $url = static::url(static::name(), $destination);
+            // $url = static::$client->getObjectUrl(static::name(), $destination);
+        } catch (\Throwable $th) {
+            // upload successful but url generation failed (user would have to generate it manually)
+            return true;
+        }
+
+        return $url;
+    }
+
+    /**
      * Upload a file to the bucket
      * @param string|resource $file The path to the file
      * @param string $destination The path to upload the file to
