@@ -36,6 +36,12 @@ class Bucket
      */
     public static function connect(array $bucketConfig)
     {
+        foreach (['endpoint', 'key', 'secret', 'bucket'] as $required) {
+            if (empty($bucketConfig[$required])) {
+                throw new \InvalidArgumentException("Bucket connection is missing the '$required' key");
+            }
+        }
+
         $adapter = new \League\Flysystem\AwsS3V3\AwsS3V3Adapter(
             static::$client = new S3Client([
                 'region' => $bucketConfig['region'] ?? 'auto',
@@ -83,7 +89,8 @@ class Bucket
     public static function temporaryUrl(string $path, $expires): string
     {
         if (is_string($expires)) {
-            $expires = tick($expires);
+            // tick() ships with leafs/date, which is optional here
+            $expires = function_exists('tick') ? tick($expires) : new \DateTime($expires);
         }
 
         if ($expires instanceof \Leaf\Date) {
@@ -102,22 +109,28 @@ class Bucket
      */
     public static function createFile(string $path, string $content, array $options = [])
     {
-        $options = array_merge($options, [
+        // defaults first so caller options win: the old order forced
+        // every upload public no matter what visibility was passed
+        $options = array_merge([
             'visibility' => 'public',
             'metadata' => [
                 'created_at' => date('Y-m-d H:i:s'),
                 'updated_at' => date('Y-m-d H:i:s')
             ]
-        ]);
+        ], $options);
 
         $path = (new Path($path))->normalize();
 
-        if (!static::$bucket->directoryExists($path)) {
-            static::$bucket->createDirectory($path);
+        // $path is the file itself: the directory to ensure is its parent.
+        // Treating $path as a directory produced docs/note.txt/note.txt
+        $directory = dirname($path);
+
+        if ($directory !== '.' && !static::$bucket->directoryExists($directory)) {
+            static::$bucket->createDirectory($directory);
         }
 
         $fileName = $options['name'] ?? basename($path);
-        $destination = (new Path($path))->join($fileName);
+        $destination = $directory === '.' ? $fileName : (new Path($directory))->join($fileName);
 
         if (static::$bucket->fileExists($destination)) {
             if ($options['overwrite'] ?? false) {
@@ -184,13 +197,15 @@ class Bucket
             $file = stream_get_meta_data($resource)['uri'];
         }
 
-        $options = array_merge($options, [
+        // defaults first so caller options win: the old order forced
+        // every upload public no matter what visibility was passed
+        $options = array_merge([
             'visibility' => 'public',
             'metadata' => [
                 'created_at' => date('Y-m-d H:i:s'),
                 'updated_at' => date('Y-m-d H:i:s')
             ]
-        ]);
+        ], $options);
 
         $destination = (new Path($destination))->normalize();
 
@@ -206,7 +221,7 @@ class Bucket
             } else if ($options['rename'] ?? false) {
                 $destination = str_replace(
                     $options['name'] ?? basename($file),
-                    time() . '_' . uniqid() . '_' . $options['name'] ?? basename($file),
+                    time() . '_' . uniqid() . '_' . ($options['name'] ?? basename($file)),
                     $destination
                 );
             } else {
@@ -237,6 +252,187 @@ class Bucket
     }
 
     /**
+     * Check if a file exists in the bucket
+     * @param string $path The path to the file
+     */
+    public static function exists(string $path): bool
+    {
+        try {
+            return static::$bucket->fileExists((new Path($path))->normalize());
+        } catch (\Throwable $exception) {
+            static::$errorsArray[$path] = $exception->getMessage();
+
+            return false;
+        }
+    }
+
+    /**
+     * Read a file from the bucket
+     * @param string $path The path to the file
+     * @return string|false The file contents, or false on failure
+     */
+    public static function read(string $path)
+    {
+        try {
+            return static::$bucket->read((new Path($path))->normalize());
+        } catch (\Throwable $exception) {
+            static::$errorsArray[$path] = $exception->getMessage();
+
+            return false;
+        }
+    }
+
+    /**
+     * Write to a file in the bucket, replacing whatever is there
+     * @param string $path The path to the file
+     * @param string $content The content to write
+     */
+    public static function write(string $path, string $content): bool
+    {
+        try {
+            static::$bucket->write((new Path($path))->normalize(), $content);
+
+            return true;
+        } catch (\Throwable $exception) {
+            static::$errorsArray[$path] = $exception->getMessage();
+
+            return false;
+        }
+    }
+
+    /**
+     * Delete a file from the bucket
+     * @param string $path The path to the file
+     */
+    public static function delete(string $path): bool
+    {
+        try {
+            static::$bucket->delete((new Path($path))->normalize());
+
+            return true;
+        } catch (\Throwable $exception) {
+            static::$errorsArray[$path] = $exception->getMessage();
+
+            return false;
+        }
+    }
+
+    /**
+     * Copy a file within the bucket
+     * @param string $source The path to copy from
+     * @param string $destination The path to copy to
+     */
+    public static function copy(string $source, string $destination): bool
+    {
+        try {
+            static::$bucket->copy(
+                (new Path($source))->normalize(),
+                (new Path($destination))->normalize()
+            );
+
+            return true;
+        } catch (\Throwable $exception) {
+            static::$errorsArray[$source] = $exception->getMessage();
+
+            return false;
+        }
+    }
+
+    /**
+     * Move a file within the bucket
+     * @param string $source The path to move from
+     * @param string $destination The path to move to
+     */
+    public static function move(string $source, string $destination): bool
+    {
+        try {
+            static::$bucket->move(
+                (new Path($source))->normalize(),
+                (new Path($destination))->normalize()
+            );
+
+            return true;
+        } catch (\Throwable $exception) {
+            static::$errorsArray[$source] = $exception->getMessage();
+
+            return false;
+        }
+    }
+
+    /**
+     * Get the size of a file in the bucket, in bytes
+     * @param string $path The path to the file
+     * @return int|false
+     */
+    public static function size(string $path)
+    {
+        try {
+            return static::$bucket->fileSize((new Path($path))->normalize());
+        } catch (\Throwable $exception) {
+            static::$errorsArray[$path] = $exception->getMessage();
+
+            return false;
+        }
+    }
+
+    /**
+     * Get the last modified time of a file in the bucket, as a unix timestamp
+     * @param string $path The path to the file
+     * @return int|false
+     */
+    public static function lastModified(string $path)
+    {
+        try {
+            return static::$bucket->lastModified((new Path($path))->normalize());
+        } catch (\Throwable $exception) {
+            static::$errorsArray[$path] = $exception->getMessage();
+
+            return false;
+        }
+    }
+
+    /**
+     * Get the mime type of a file in the bucket
+     * @param string $path The path to the file
+     * @return string|false
+     */
+    public static function mimeType(string $path)
+    {
+        try {
+            return static::$bucket->mimeType((new Path($path))->normalize());
+        } catch (\Throwable $exception) {
+            static::$errorsArray[$path] = $exception->getMessage();
+
+            return false;
+        }
+    }
+
+    /**
+     * List the files in a bucket directory
+     * @param string $path The directory to list
+     * @param bool $recursive List files in sub-directories too?
+     * @return array<int, string>
+     */
+    public static function list(string $path = '', bool $recursive = false): array
+    {
+        try {
+            return static::$bucket
+                ->listContents((new Path($path))->normalize(), $recursive)
+                ->filter(function ($item) {
+                    return $item->isFile();
+                })
+                ->map(function ($item) {
+                    return $item->path();
+                })
+                ->toArray();
+        } catch (\Throwable $exception) {
+            static::$errorsArray[$path] = $exception->getMessage();
+
+            return [];
+        }
+    }
+
+    /**
      * Return current adapter
      * @return Filesystem|null
      */
@@ -252,7 +448,22 @@ class Bucket
      */
     public static function connection(string $connection): ?Bucket
     {
-        return static::connect(\Leaf\Config::getStatic('storage.connections')[$connection]);
+        $connections = \Leaf\Config::getStatic('storage.connections') ?? [];
+
+        if (isset($connections[$connection])) {
+            return static::connect($connections[$connection]);
+        }
+
+        // no connection registered under that name: fall back to whatever
+        // is already connected, so a manual connect() still works with
+        // withBucket() paths
+        if (static::$bucket) {
+            return new static();
+        }
+
+        static::$errorsArray['bucket'] = "No bucket connection named '$connection'. Register it with Bucket::connections([...]) or connect to a bucket first.";
+
+        return null;
     }
 
     /**
@@ -279,7 +490,9 @@ class Bucket
 
         $client = new S3Client([
             'region' => $bucketConfig['region'] ?? 'auto',
-            'endpoint' => $bucketConfig['url'],
+            // connections are configured with 'endpoint'; 'url' kept as a
+            // fallback for configs that used the old key
+            'endpoint' => $bucketConfig['endpoint'] ?? $bucketConfig['url'],
             'use_path_style_endpoint' => $bucketConfig['use_path_style_endpoint'] ?? false,
             'version' => 'latest',
             'credentials' => (new \Aws\Credentials\Credentials(

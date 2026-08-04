@@ -31,13 +31,14 @@
   "minimum-stability": "dev",
   "prefer-stable": true,
   "require": {
-    "leafs/fs": "*",
+    "php": "^8.2",
+    "leafs/fs": "^4.2 || ^5.0",
     "aws/aws-sdk-php": "*",
     "league/flysystem-aws-s3-v3": "*"
   },
   "require-dev": {
     "pestphp/pest": "^1.21",
-    "leafs/alchemy": "^4.0",
+    "leafs/alchemy": "v5.x-dev",
     "friendsofphp/php-cs-fixer": "^3.64"
   },
   "config": {
@@ -47,8 +48,9 @@
   },
   "scripts": {
     "alchemy": "./vendor/bin/alchemy setup",
-    "test": "./vendor/bin/alchemy setup --test",
-    "lint": "./vendor/bin/alchemy setup --lint",
-    "actions": "./vendor/bin/alchemy setup --actions"
+    "test": "./vendor/bin/alchemy test",
+    "lint": "./vendor/bin/alchemy lint",
+    "fmt": "./vendor/bin/alchemy fmt",
+    "ci": "./vendor/bin/alchemy ci"
   }
 }
