@@ -49,7 +49,17 @@ test('delete removes a file', function () {
 });
 
 test('reading a missing file fails without throwing', function () {
-    expect(Bucket::read('nope.txt'))->toBeFalse();
+    // flysystem's local adapter raises a php warning from file_get_contents
+    // before throwing — Bucket::read() catches the throw; the warning is
+    // adapter noise, not part of the contract under test
+    set_error_handler(fn () => true, E_WARNING);
+
+    try {
+        expect(Bucket::read('nope.txt'))->toBeFalse();
+    } finally {
+        restore_error_handler();
+    }
+
     expect(Bucket::errors())->not->toBeEmpty();
 });
 
