@@ -37,7 +37,7 @@
     "league/flysystem-aws-s3-v3": "*"
   },
   "require-dev": {
-    "pestphp/pest": "^1.21",
+    "pestphp/pest": "*",
     "leafs/alchemy": "^5.0",
     "friendsofphp/php-cs-fixer": "*"
   },

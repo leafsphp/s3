@@ -60,7 +60,7 @@ class Bucket
                 'credentials' => (new \Aws\Credentials\Credentials(
                     $bucketConfig['key'],
                     $bucketConfig['secret']
-                ))
+                )),
             ]),
             $bucketConfig['bucket']
         );
@@ -68,7 +68,7 @@ class Bucket
         static::$config = $bucketConfig;
         static::$bucket = new Filesystem($adapter);
 
-        return static::cache(new static);
+        return static::cache(new static());
     }
 
     /**
@@ -124,8 +124,8 @@ class Bucket
             'visibility' => 'public',
             'metadata' => [
                 'created_at' => date('Y-m-d H:i:s'),
-                'updated_at' => date('Y-m-d H:i:s')
-            ]
+                'updated_at' => date('Y-m-d H:i:s'),
+            ],
         ], $options);
 
         $path = static::key($path);
@@ -144,7 +144,7 @@ class Bucket
         if (static::$bucket->fileExists($destination)) {
             if ($options['overwrite'] ?? false) {
                 static::$bucket->delete($destination);
-            } else if ($options['rename'] ?? false) {
+            } elseif ($options['rename'] ?? false) {
                 $destination = str_replace(
                     $fileName,
                     time() . '_' . uniqid() . '_' . $fileName,
@@ -152,6 +152,7 @@ class Bucket
                 );
             } else {
                 static::$errorsArray[$path] = "File $destination already exists";
+
                 return false;
             }
         }
@@ -160,6 +161,7 @@ class Bucket
             static::$bucket->write($destination, $content, $options);
         } catch (\League\Flysystem\FilesystemException | \League\Flysystem\UnableToWriteFile $exception) {
             static::$errorsArray[$path] = $exception->getMessage();
+
             return false;
         }
 
@@ -190,11 +192,13 @@ class Bucket
 
             if (!File::exists($file)) {
                 static::$errorsArray[$file] = "File $file does not exist";
+
                 return false;
             }
 
             if (!$resource = File::toResource($file, 'r+')) {
                 static::$errorsArray[$file] = "Could not open file $file";
+
                 return false;
             }
         } else {
@@ -212,8 +216,8 @@ class Bucket
             'visibility' => 'public',
             'metadata' => [
                 'created_at' => date('Y-m-d H:i:s'),
-                'updated_at' => date('Y-m-d H:i:s')
-            ]
+                'updated_at' => date('Y-m-d H:i:s'),
+            ],
         ], $options);
 
         $destination = static::key($destination);
@@ -227,7 +231,7 @@ class Bucket
         if (static::$bucket->fileExists($destination)) {
             if ($options['overwrite'] ?? false) {
                 static::$bucket->delete($destination);
-            } else if ($options['rename'] ?? false) {
+            } elseif ($options['rename'] ?? false) {
                 $destination = str_replace(
                     $options['name'] ?? basename($file),
                     time() . '_' . uniqid() . '_' . ($options['name'] ?? basename($file)),
@@ -235,6 +239,7 @@ class Bucket
                 );
             } else {
                 static::$errorsArray[$file] = "File $destination already exists";
+
                 return false;
             }
         }
@@ -243,6 +248,7 @@ class Bucket
             static::$bucket->writeStream($destination, $resource, $options);
         } catch (\League\Flysystem\FilesystemException | \League\Flysystem\UnableToWriteFile $exception) {
             static::$errorsArray[$file] = $exception->getMessage();
+
             return false;
         }
 
@@ -489,6 +495,7 @@ class Bucket
         foreach ($connections as $connection) {
             if ($connection['bucket'] === $bucket) {
                 $bucketConfig = $connection;
+
                 break;
             }
         }
@@ -507,7 +514,7 @@ class Bucket
             'credentials' => (new \Aws\Credentials\Credentials(
                 $bucketConfig['key'],
                 $bucketConfig['secret']
-            ))
+            )),
         ]);
 
         $url = $client->getObjectUrl($bucketConfig['bucket'], $path);
