@@ -20,6 +20,15 @@ class Bucket
     protected static array $errorsArray = [];
 
     /**
+     * Normalize a bucket object key — object keys are always forward-slash,
+     * whatever directory separator the host OS uses
+     */
+    protected static function key($path): string
+    {
+        return str_replace('\\', '/', (new Path($path))->normalize());
+    }
+
+    /**
      * Store all bucket connections
      * @param array $connections The connections to the buckets
      * @param string $default The default connection to use
@@ -119,7 +128,7 @@ class Bucket
             ]
         ], $options);
 
-        $path = (new Path($path))->normalize();
+        $path = static::key($path);
 
         // $path is the file itself: the directory to ensure is its parent.
         // Treating $path as a directory produced docs/note.txt/note.txt
@@ -130,7 +139,7 @@ class Bucket
         }
 
         $fileName = $options['name'] ?? basename($path);
-        $destination = $directory === '.' ? $fileName : (new Path($directory))->join($fileName);
+        $destination = $directory === '.' ? $fileName : static::key((new Path($directory))->join($fileName));
 
         if (static::$bucket->fileExists($destination)) {
             if ($options['overwrite'] ?? false) {
@@ -207,13 +216,13 @@ class Bucket
             ]
         ], $options);
 
-        $destination = (new Path($destination))->normalize();
+        $destination = static::key($destination);
 
         if (!static::$bucket->directoryExists($destination)) {
             static::$bucket->createDirectory($destination);
         }
 
-        $destination = (new Path($destination))->join($options['name'] ?? basename($file));
+        $destination = static::key((new Path($destination))->join($options['name'] ?? basename($file)));
 
         if (static::$bucket->fileExists($destination)) {
             if ($options['overwrite'] ?? false) {
@@ -258,7 +267,7 @@ class Bucket
     public static function exists(string $path): bool
     {
         try {
-            return static::$bucket->fileExists((new Path($path))->normalize());
+            return static::$bucket->fileExists(static::key($path));
         } catch (\Throwable $exception) {
             static::$errorsArray[$path] = $exception->getMessage();
 
@@ -274,7 +283,7 @@ class Bucket
     public static function read(string $path)
     {
         try {
-            return static::$bucket->read((new Path($path))->normalize());
+            return static::$bucket->read(static::key($path));
         } catch (\Throwable $exception) {
             static::$errorsArray[$path] = $exception->getMessage();
 
@@ -290,7 +299,7 @@ class Bucket
     public static function write(string $path, string $content): bool
     {
         try {
-            static::$bucket->write((new Path($path))->normalize(), $content);
+            static::$bucket->write(static::key($path), $content);
 
             return true;
         } catch (\Throwable $exception) {
@@ -307,7 +316,7 @@ class Bucket
     public static function delete(string $path): bool
     {
         try {
-            static::$bucket->delete((new Path($path))->normalize());
+            static::$bucket->delete(static::key($path));
 
             return true;
         } catch (\Throwable $exception) {
@@ -326,8 +335,8 @@ class Bucket
     {
         try {
             static::$bucket->copy(
-                (new Path($source))->normalize(),
-                (new Path($destination))->normalize()
+                static::key($source),
+                static::key($destination)
             );
 
             return true;
@@ -347,8 +356,8 @@ class Bucket
     {
         try {
             static::$bucket->move(
-                (new Path($source))->normalize(),
-                (new Path($destination))->normalize()
+                static::key($source),
+                static::key($destination)
             );
 
             return true;
@@ -367,7 +376,7 @@ class Bucket
     public static function size(string $path)
     {
         try {
-            return static::$bucket->fileSize((new Path($path))->normalize());
+            return static::$bucket->fileSize(static::key($path));
         } catch (\Throwable $exception) {
             static::$errorsArray[$path] = $exception->getMessage();
 
@@ -383,7 +392,7 @@ class Bucket
     public static function lastModified(string $path)
     {
         try {
-            return static::$bucket->lastModified((new Path($path))->normalize());
+            return static::$bucket->lastModified(static::key($path));
         } catch (\Throwable $exception) {
             static::$errorsArray[$path] = $exception->getMessage();
 
@@ -399,7 +408,7 @@ class Bucket
     public static function mimeType(string $path)
     {
         try {
-            return static::$bucket->mimeType((new Path($path))->normalize());
+            return static::$bucket->mimeType(static::key($path));
         } catch (\Throwable $exception) {
             static::$errorsArray[$path] = $exception->getMessage();
 
@@ -417,7 +426,7 @@ class Bucket
     {
         try {
             return static::$bucket
-                ->listContents((new Path($path))->normalize(), $recursive)
+                ->listContents(static::key($path), $recursive)
                 ->filter(function ($item) {
                     return $item->isFile();
                 })
